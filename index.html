@@ -78,7 +78,7 @@
   <button class="ghost" id="auto">▶ Auto tour</button>
   <button class="ghost" id="theme" title="Switch light / dark">☀ Light</button>
 </div>
-<div id="hint">Drag to look around · scroll to zoom · click a station to fly there</div>
+<div id="hint">Drag to look around · scroll to zoom · click a station or the centre plaza</div>
 
 <script type="module">
 import * as THREE from "three";
@@ -123,7 +123,7 @@ let grid = new THREE.GridHelper(190, 76, 0x3a2b52, 0x2a1f3c); grid.position.y = 
 }
 
 // helpers
-const updaters = [], baseMats = [];
+const updaters = [], baseMats = [], cohortUpdaters = [];
 const std = (color, extra = {}) => new THREE.MeshStandardMaterial(Object.assign({ color, roughness:0.45, metalness:0.1 }, extra));
 const glow = (color, i = 0.9) => new THREE.MeshStandardMaterial({ color, emissive:color, emissiveIntensity:i, roughness:0.3 });
 function mesh(geo, mat, x = 0, y = 0, z = 0, parent) {
@@ -211,7 +211,7 @@ const stations = [];
     const l = label(name, null, { scale:0.7 }); l.position.set(x, 6.8, z); g.add(l);
     const orbs = [];
     for (let i = 0; i < n; i++) { const o = mesh(new THREE.SphereGeometry(0.32, 16, 16), glow(col, 0.6), x, 3.5, z, g); orbs.push(o); }
-    updaters.push((t) => orbs.forEach((o, i) => { const a = t * (0.6 + j * 0.15) + (i / n) * Math.PI * 2, r = 2.6 + (i % 2) * 0.6;
+    cohortUpdaters.push((t) => orbs.forEach((o, i) => { const a = t * (0.6 + j * 0.15) + (i / n) * Math.PI * 2, r = 2.6 + (i % 2) * 0.6;
       o.position.set(x + Math.cos(a) * r, 3.6 + Math.sin(t * 2 + i) * 0.35 + (i % 3) * 0.5, z + Math.sin(a) * r); }));
   });
 }
@@ -323,6 +323,102 @@ const stations = [];
   });
 }
 
+
+// people: simple avatar figure
+function person(color, { kind = "student", scale = 1 } = {}) {
+  const f = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.34, 0.75, 4, 12), std(color)); body.position.y = 0.72; body.castShadow = true; f.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), std(0xF1E4D8, { roughness:0.7 })); head.position.y = 1.62; head.castShadow = true; f.add(head);
+  if (kind === "prof") {
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.07, 0.75), std(0x1F1A2B)); cap.position.y = 1.9; cap.rotation.y = Math.PI / 4; f.add(cap);
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.14, 12), std(0x1F1A2B)); top.position.y = 1.83; f.add(top);
+    const tassel = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), glow(C.amber, 0.6)); tassel.position.set(0.3, 1.8, 0.3); f.add(tassel);
+  } else if (kind === "industry") {
+    const hat = new THREE.Mesh(new THREE.SphereGeometry(0.33, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), std(0xF2C230)); hat.position.y = 1.7; f.add(hat);
+  } else if (kind === "mentor") {
+    const badge = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.06, 8, 24), glow(C.mint, 0.9)); badge.position.y = 2.15; badge.rotation.x = Math.PI / 2; f.add(badge);
+  }
+  f.scale.setScalar(scale); return f;
+}
+
+// cohort station: replace orbs with student avatars (no names)
+{
+  const g = stations[2];
+  [...g.children].forEach((ch) => { if (ch.geometry && ch.geometry.type === "SphereGeometry") g.remove(ch); });
+  [[-5, 2, 14, C.purple], [3.5, -4.5, 9, C.green], [4, 4.5, 9, C.amber]].forEach(([x, z, n, col], j) => {
+    const ringG = new THREE.Group(); ringG.position.set(x, 0.8, z); g.add(ringG);
+    for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2, r = n > 10 ? 3.1 : 2.7;
+      const p = person(col, { scale:0.8 }); p.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); p.lookAt(0, 0, 0); ringG.add(p); }
+    updaters.push((t) => { ringG.rotation.y = t * 0.15 * (j % 2 ? -1 : 1); ringG.children.forEach((p, i) => p.position.y = Math.abs(Math.sin(t * 2.2 + i)) * 0.15); });
+  });
+}
+
+// central plaza: all the people and stakeholders
+const HUB = new THREE.Vector3(0, 0, 6);
+let hubGroup;
+{
+  const g = new THREE.Group(); g.position.copy(HUB); scene.add(g); hubGroup = g;
+  const base = mesh(new THREE.CylinderGeometry(19, 19.6, 0.8, 96), std(0x2e2244, { roughness:0.8 }), 0, 0.4, 0, g); baseMats.push(base.material); base.userData.station = true;
+  [19.3, 10.5, 6.6].forEach((r, k) => { const ring = mesh(new THREE.TorusGeometry(r, k ? 0.06 : 0.14, 8, 128), glow(k ? C.lav : C.amber, k ? 0.4 : 1.1), 0, 0.85, 0, g); ring.rotation.x = Math.PI / 2; ring.castShadow = false; });
+  const tl = label("★ The people", "Students · faculty · mentors · partners", { scale:1.3 }); tl.position.set(0, 11, 0); g.add(tl);
+  // centre monument
+  mesh(new THREE.CylinderGeometry(1.4, 1.8, 2.2, 6), std(C.deep), 0, 1.9, 0, g);
+  const gem = mesh(new THREE.OctahedronGeometry(1.2, 0), glow(C.mint, 0.8), 0, 4.6, 0, g);
+  updaters.push((t) => { gem.rotation.y = t * 0.7; gem.position.y = 4.6 + Math.sin(t * 1.5) * 0.25; });
+
+  const ring = (items, r, a0, a1, y = 0.8) => items.map((it, i) => {
+    const a = a0 + (items.length === 1 ? 0.5 : i / (items.length - 1)) * (a1 - a0);
+    const p = person(it.color, { kind:it.kind, scale:it.scale || 1.15 }); p.position.set(Math.cos(a) * r, y, Math.sin(a) * r); p.lookAt(0, y, 0); g.add(p);
+    if (it.name) { const l = label(it.name, it.role, { scale:0.58 }); l.position.set(Math.cos(a) * r, y + 3.0 + (i % 2) * 0.9, Math.sin(a) * r); g.add(l); }
+    return p;
+  });
+  // inner ring: WeSchool faculty
+  const faculty = ring([
+    { name:"Dr. Bijith Marakarkandy", role:"Program Head, E-Business", color:C.deep, kind:"prof" },
+    { name:"Dr. Pratibha Jha", role:"Program In-charge, Batch 2", color:C.deep, kind:"prof" },
+    { name:"Dr. Sandeep Kelkar", role:"Assoc. Prof · Head Technology", color:C.deep, kind:"prof" },
+    { name:"Dr. Sonia Mehrotra", role:"Professor, HR · CoE Cases", color:C.purple, kind:"prof" },
+    { name:"Dr. Preetha Chandran", role:"Professor, Finance", color:C.purple, kind:"prof" },
+    { name:"Dr. Santosh Rupa Jaladi", role:"Assoc. Professor, Finance", color:C.purple, kind:"prof" },
+    { name:"Dr. Rangappa Yaraddi", role:"Asst. Professor, Operations", color:C.purple, kind:"prof" },
+  ], 4.6, Math.PI * 0.15, Math.PI * 1.85);
+  // middle ring: mentors
+  ring([
+    { name:"Prof. Sonia", role:"WeSchool mentor", color:C.green, kind:"mentor" },
+    { name:"Prof. Radhika", role:"WeSchool mentor", color:C.green, kind:"mentor" },
+    { name:"Prof. Asha", role:"WeSchool mentor", color:C.green, kind:"mentor" },
+    { name:"Dr. Prathap B", role:"Industry mentor", color:C.amber, kind:"industry" },
+    { name:"Dr. Nilardri Choudhuri", role:"Industry mentor", color:C.amber, kind:"industry" },
+    { name:"Bamberg mentors", role:"To be confirmed", color:C.purple, kind:"mentor" },
+  ], 8.6, Math.PI * 0.05, Math.PI * 1.95);
+  // outer ring: 32 student avatars by campus (no names)
+  const studs = []; const arcs = [[14, C.purple, "Uni Bamberg students · 14"], [9, C.green, "WeSchool Mumbai students · 9"], [9, C.amber, "WeSchool Bengaluru students · 9"]];
+  let a = Math.PI * 0.12;
+  arcs.forEach(([n, col, name]) => {
+    const span = (n / 32) * Math.PI * 1.7, start = a;
+    for (let i = 0; i < n; i++) { const b = start + (i / (n - 1)) * span, p = person(col, { scale:0.85 });
+      p.position.set(Math.cos(b) * 12.3, 0.8, Math.sin(b) * 12.3); p.lookAt(0, 0.8, 0); g.add(p); studs.push(p); }
+    const mid = start + span / 2, l = label(name, null, { scale:0.62 }); l.position.set(Math.cos(mid) * 12.3, 4.2, Math.sin(mid) * 12.3); g.add(l);
+    a += span + Math.PI * 0.1;
+  });
+  updaters.push((t) => studs.forEach((p, i) => { p.position.y = 0.8 + Math.abs(Math.sin(t * 2 + i * 0.7)) * 0.12; }));
+  // outer edge: partner organisations as small buildings
+  const partners = ["Siemens Healthineers", "Toyo Engineering", "Nayara Energy", "Green Computing Foundation", "Good Earth Eco", "GroundReality (GridMats®)", "Synthesis Winding Tech"];
+  partners.forEach((nm, i) => {
+    const b = Math.PI * 0.15 + (i / partners.length) * Math.PI * 2, x = Math.cos(b) * 16.3, z = Math.sin(b) * 16.3, h = 2.2 + (i % 3) * 0.7;
+    const bld = mesh(new THREE.BoxGeometry(2, h, 2), std(i % 2 ? 0x7a5f9c : C.green), x, 0.8 + h / 2, z, g); bld.lookAt(0, 0.8 + h / 2, 0);
+    for (let w = 0; w < 2; w++) mesh(new THREE.BoxGeometry(0.4, 0.4, 0.05), glow(0xF6E7A8, 0.6), x * 0.94 + (w ? 0.3 : -0.3) * Math.sin(b), 1.6 + w * 0.6, z * 0.94 - (w ? 0.3 : -0.3) * Math.cos(b), g).castShadow = false;
+    const l = label(nm, "Industry partner", { scale:0.55 }); l.position.set(x, 0.8 + h + 1.4, z); g.add(l);
+  });
+  // spokes from the plaza to every station
+  P.forEach((p) => {
+    const d = p.clone().sub(HUB).setY(0), len = d.length() - 19.6 - 10.6, dir = d.clone().normalize();
+    const start = HUB.clone().addScaledVector(dir, 19.6), mid = start.clone().addScaledVector(dir, len / 2);
+    const sp = mesh(new THREE.CylinderGeometry(0.09, 0.09, len, 6), glow(C.lav, 0.35), mid.x, 0.15, mid.z);
+    sp.rotation.z = Math.PI / 2; sp.rotation.y = -Math.atan2(dir.z, dir.x); sp.castShadow = false;
+  });
+}
+
 // journey path: segments run rim to rim between stations
 {
   for (let i = 0; i < P.length - 1; i++) {
@@ -343,8 +439,19 @@ const steps = [
   { title:"The journey at a glance", cam:[0, 62, 78], tgt:[0, 0, 10],
     html:`<p class="lead">An 11-week, three-campus collaboration where student teams from Germany and India solve real industry problems on sustainability and digital transformation.</p>
     <ul><li><b>8 stations</b> follow the glowing path, from kick-off to the final presentation.</li>
+    <li><b>The people</b> plaza at the centre links everyone involved to every station.</li>
     <li>Press <b>Next</b> for a guided tour, or click any station.</li></ul>
     <p style="margin-top:12px"><span class="chip"><span class="dot" style="background:#5C4178"></span>Uni Bamberg</span><span class="chip"><span class="dot" style="background:#509844"></span>WeSchool Mumbai</span><span class="chip"><span class="dot" style="background:#D9952B"></span>WeSchool Bengaluru</span></p>` },
+  { title:"The people and stakeholders", hub:true,
+    html:`<p class="lead">Everyone in the 2026–27 collaboration, gathered at the centre of the journey and linked to every station.</p>
+    <ul><li><b>Institutions:</b> Otto-Friedrich-Universität Bamberg; WeSchool Mumbai and Bengaluru (E-Business Department)</li>
+    <li><b>Programme leadership:</b> Dr. Bijith Marakarkandy, Program Head · Dr. Pratibha Jha, Program In-charge, Batch 2 · Dr. Sandeep Kelkar, Head Technology</li>
+    <li><b>Domain faculty:</b> Dr. Sonia Mehrotra, Dr. Preetha Chandran, Dr. Santosh Rupa Jaladi, Dr. Rangappa Yaraddi</li>
+    <li><b>Faculty mentors:</b> Prof. Sonia, Prof. Radhika, Prof. Asha (WeSchool); Bamberg mentors to be confirmed</li>
+    <li><b>Industry mentors:</b> Dr. Prathap B, Dr. Nilardri Choudhuri</li>
+    <li><b>Partners:</b> Siemens Healthineers, Toyo Engineering, Nayara Energy, Green Computing Foundation, Good Earth Eco, GroundReality (GridMats®), Synthesis Winding Technologies</li>
+    <li><b>Students:</b> 32 in all: 14 Bamberg, 9 Mumbai, 9 Bengaluru</li></ul>
+    <p style="margin-top:10px"><span class="chip">🎓 cap = faculty</span><span class="chip">◯ halo = mentor</span><span class="chip">⛑ hat = industry</span></p>` },
   { title:"Kick-off: the partnership", s:0,
     html:`<p class="lead">Otto-Friedrich-Universität Bamberg and Welingkar Institute (WeSchool) launch the 2026–27 edition, led by WeSchool's E-Business Department.</p>
     <ul><li><b>Uni Bamberg</b> brings Information Systems, strategy and sustainability students.</li>
@@ -396,6 +503,7 @@ const steps = [
 
 // camera for stations: outward offset
 steps.forEach((st) => {
+  if (st.hub) { st.tgt = [5, 1, 9]; st.cam = [-10, 19, 30]; return; }
   if (st.s === undefined) return;
   const c = P[st.s], dir = new THREE.Vector3(c.x, 0, c.z - 6).normalize();
   st.tgt = [c.x, 4, c.z];
@@ -410,7 +518,7 @@ function go(i) {
   cur = (i + steps.length) % steps.length; const st = steps[cur];
   panel.classList.add("fade");
   setTimeout(() => {
-    panel.innerHTML = `<div class="step">${cur === 0 ? "Overview" : "Station " + cur + " of 8"}</div><h2>${st.title}</h2>${st.html}`;
+    panel.innerHTML = `<div class="step">${cur === 0 ? "Overview" : st.hub ? "Centre plaza" : "Station " + (st.s + 1) + " of 8"}</div><h2>${st.title}</h2>${st.html}`;
     panel.classList.remove("fade");
   }, 250);
   [...dots.children].forEach((d, k) => d.classList.toggle("active", k === cur));
@@ -431,8 +539,8 @@ canvas.addEventListener("pointerdown", (e) => { downAt = [e.clientX, e.clientY];
 canvas.addEventListener("pointerup", (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return;
   mouse.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1); ray.setFromCamera(mouse, camera);
-  const hits = ray.intersectObjects(stations.map((g) => g), true);
-  if (hits.length) { let o = hits[0].object; while (o && !stations.includes(o)) o = o.parent; const k = stations.indexOf(o); if (k >= 0) { stopAuto(); go(k + 1); } }
+  const hits = ray.intersectObjects([...stations, hubGroup], true);
+  if (hits.length) { let o = hits[0].object; while (o && !stations.includes(o) && o !== hubGroup) o = o.parent; if (o === hubGroup) { stopAuto(); go(1); } else { const k = stations.indexOf(o); if (k >= 0) { stopAuto(); go(k + 2); } } }
 });
 controls.addEventListener("start", () => { tween = null; });
 
